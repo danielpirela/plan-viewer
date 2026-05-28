@@ -10,15 +10,23 @@
 // HTTP fallback:
 //   POST /api/action  → same JSON body as WS action
 //   GET  /api/health  → { status: "ok", port: number }
+//
+// Orchestrator wake-up:
+//   After writing an action, triggers the orchestrator (Pi/OpenCode) via tmux.
+//   Set TMUX_SESSION env var to the tmux session name (default: "pi").
+//   Set TMUX_WAKE_DISABLED=1 to disable tmux integration.
 
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const { spawn } = require("child_process");
 const { WebSocketServer } = require("ws");
 
 const PORT = parseInt(process.argv[2], 10) || 4200;
 const ACTIONS_FILE = path.join(__dirname, ".plan-actions.json");
 const STATUS_FILE = "/tmp/plan-viewer-status.json";
+const TMUX_SESSION = process.env.TMUX_SESSION || "pi";
+const TMUX_DISABLED = process.env.TMUX_WAKE_DISABLED === "1";
 
 // ── Action queue persistence ──
 
@@ -48,7 +56,63 @@ function addAction(actionPayload) {
     data.actions = data.actions.slice(-50);
   }
   fs.writeFileSync(ACTIONS_FILE, JSON.stringify(data, null, 2));
+
+  // Wake up the orchestrator via tmux
+  wakeOrchestrator(entry);
+
   return entry;
+}
+
+// ── Orchestrator wake-up ──
+// Tries tmux first (reliable), then falls back to direct pty write.
+// If neither works, the user must trigger the orchestrator manually.
+
+function wakeOrchestrator(entry) {
+  if (TMUX_DISABLED) return;
+
+  const actionLabel = entry.action || "unknown";
+  const triggerMsg = "pv:" + actionLabel;
+
+  // Primary: tmux send-keys (most reliable)
+  const tmux = spawn("tmux", [
+    "send-keys", "-t", TMUX_SESSION,
+    triggerMsg, "Enter"
+  ], {
+    stdio: "ignore",
+    timeout: 2000,
+  });
+
+  tmux.on("error", () => {
+    // tmux failed, try fallback
+    wakeViaPty(triggerMsg);
+  });
+
+  tmux.on("exit", (code) => {
+    if (code === 0) {
+      console.log(`📲 Orchestrator notified via tmux (${TMUX_SESSION}): ${actionLabel}`);
+    } else {
+      wakeViaPty(triggerMsg);
+    }
+  });
+}
+
+function wakeViaPty(message) {
+  // Fallback: write to Pi's controlling terminal fd
+  // This only works if the terminal emulator supports it
+  try {
+    const piPid = require("child_process")
+      .execSync("pgrep -f '^pi$' | head -1", { timeout: 1000 })
+      .toString().trim();
+    if (!piPid) return;
+
+    // Write trigger message to the process stdin fd
+    // On some ptys this appears as input; on most it's just display
+    const fd = `/proc/${piPid}/fd/0`;
+    fs.writeFileSync(fd, message + "\n");
+    console.log(`📲 Attempted pty wake (PID ${piPid}): ${message.split(":")[1] || message}`);
+  } catch {
+    // No Pi process found — nothing to wake
+  }
 }
 
 // ── HTTP server (health + action API + CORS) ──
