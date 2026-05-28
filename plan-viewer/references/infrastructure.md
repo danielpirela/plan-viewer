@@ -212,17 +212,27 @@ Para ver acciones pendientes, el orchestrator lee:
 $PLAN_VIEWER_HOME/.plan-actions.json
 ```
 
-### Startup Sequence (tmux-optional)
+### Startup Sequence
 
-For CLI-only environments, start the plan-viewer manually:
+**With tmux (automatic orchestrator wake-up):**
+
+```bash
+# 1. Start orchestrator in tmux (separate terminal)
+tmux new -s pi
+pi   # or: opencode
+
+# 2. Start plan-viewer with TMUX_SESSION set (another terminal)
+cd $PLAN_VIEWER_HOME
+TMUX_SESSION=pi node start-plan-viewer.cjs &
+```
+
+**Without tmux (manual trigger):**
 
 ```bash
 cd $PLAN_VIEWER_HOME
 node start-plan-viewer.cjs &
+# After clicking in browser, type any message in orchestrator to trigger action processing.
 ```
-
-This replaces the previous three-terminal tmux setup. Tmux MAY be used
-optionally if the user prefers it, but it is NOT required.
 
 ### Removed: File Watcher
 
@@ -230,9 +240,13 @@ The `file-watcher.cjs` script has been removed. Its responsibilities are now
 handled by:
 
 - **Action delivery**: WebSocket push replaces polling `.plan-actions.json`
-  every 2 seconds and injecting `tmux send-keys`.
-- **Command injection**: No longer needed — the orchestrator reads
-  `.plan-actions.json` directly as part of its SDD workflow.
+  every 2 seconds.
+- **Command injection**: Replaced by `tmux send-keys` — the ws-server
+  automatically types a trigger message (`pv:<action>`) into the
+  orchestrator's tmux session after each action. Set `TMUX_SESSION` env
+  var (default: `pi`). Set `TMUX_WAKE_DISABLED=1` to disable.
+- **Fallback without tmux**: The orchestrator reads `.plan-actions.json`
+  on each user message as a manual trigger.
 
 ### Removed: Legacy Signal Server
 
