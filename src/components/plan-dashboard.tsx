@@ -21,6 +21,7 @@ export default function PlanDashboard() {
   const [specRequested, setSpecRequested] = useState(false)
   const [specCreated, setSpecCreated] = useState(false)
   const [wsStatus, setWsStatus] = useState<ConnectionStatus>("disconnected")
+  const [microDecisionsState, setMicroDecisionsState] = useState<Record<string, string>>({})
 
   // WebSocket signal client
   useEffect(() => {
@@ -54,7 +55,7 @@ export default function PlanDashboard() {
   }
 
   // ── Esperando que se genere el plan ──
-  if (!plan || (plan.tasks?.length === 0 && plan.scopeIn?.length === 0 && plan.specStatus !== "created")) {
+  if (!plan || !plan.tasks || !plan.scopeIn || (plan.tasks.length === 0 && plan.scopeIn.length === 0 && plan.specStatus !== "created")) {
     return <PlanLoading />
   }
 
@@ -110,8 +111,10 @@ export default function PlanDashboard() {
             title={md.title}
             description={md.description}
             decisionKey={md.decisionKey}
-            signalAction={signalAction}
             options={md.options}
+            onConfirm={(key, selected) => {
+              setMicroDecisionsState((prev) => ({ ...prev, [key]: selected }))
+            }}
           />
         ))}
 
@@ -149,7 +152,11 @@ export default function PlanDashboard() {
               onClick={() => {
                 if (specRequested) return
                 setSpecRequested(true)
-                signalAction("create-spec", { changeName: "Search Engine", decision })
+                signalAction("create-spec", {
+                  changeName: plan.heroTitle ?? "Change",
+                  decision,
+                  microDecisions: microDecisionsState,
+                })
               }}
               disabled={specRequested}
               className={`rounded-lg font-mono font-bold text-xs px-6 h-9 transition-all ${

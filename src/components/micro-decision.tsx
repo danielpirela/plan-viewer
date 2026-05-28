@@ -18,8 +18,7 @@ export interface MicroDecisionProps {
   description: string
   decisionKey: string
   options: MicroOption[]
-  onConfirm?: (selected: string) => void
-  signalAction: (action: string, data?: Record<string, unknown>) => void
+  onConfirm?: (decisionKey: string, selected: string) => void
 }
 
 // ── Component ──
@@ -30,7 +29,6 @@ export function MicroDecision({
   decisionKey,
   options,
   onConfirm,
-  signalAction,
 }: MicroDecisionProps) {
   const [selected, setSelected] = useState<string | null>(null)
   const [confirmed, setConfirmed] = useState(false)
@@ -38,12 +36,7 @@ export function MicroDecision({
   const handleConfirm = () => {
     if (!selected || confirmed) return
     setConfirmed(true)
-    onConfirm?.(selected)
-    signalAction("micro-decision", {
-      decision: decisionKey,
-      selected,
-      section: "plan-dashboard",
-    })
+    onConfirm?.(decisionKey, selected)
   }
 
   return (

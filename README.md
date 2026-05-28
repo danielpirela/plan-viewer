@@ -34,6 +34,13 @@ For the plan-viewer to automatically wake up your orchestrator (Pi or OpenCode) 
 
 ### 1. Start your orchestrator inside tmux
 
+> **Don't like tmux's UI?** You can make tmux completely invisible — no status bar, no borders. Create `~/.tmux.conf`:
+> ```
+> set -g status off
+> set -g pane-border-status off
+> ```
+> Then `tmux source ~/.tmux.conf`. Pi will look exactly the same as without tmux, but `tmux send-keys` still works for automatic wake-up.
+
 ```bash
 # Create a tmux session named "pi"
 tmux new -s pi
@@ -108,15 +115,17 @@ node start-plan-viewer.cjs &
 5. Orchestrator receives `pv:create-spec` → launches SDD spec phase
 6. Plan is archived (spec created screen)
 
-### Data Contracts
+### Data Contract — Single File, Two Phases
 
-**Decision phase** (`/` — DecisionPanel reads this):
+> **Critical**: Both routes (`/` and `/plan`) read from the SAME `plan-output.json` file. Phase 2 data is **added** to the existing Phase 1 data — never replace it. The `decisionOptions` must remain available so the user can go back to `/` and see the original decision context.
+
+**Phase 1 fields** (required for `/` — DecisionPanel):
 ```json
 {
   "heroTitle": "Feature name",
-  "heroDescription": "One-line summary",
-  "heroBadge": "Decision de Arquitectura",
+  "heroBadge": "QA Strategy",
   "heroBadgeVariant": "yellow",
+  "heroDescription": "One-line summary",
   "decisionOptions": [
     {
       "id": "unique-id",
@@ -131,15 +140,16 @@ node start-plan-viewer.cjs &
 }
 ```
 
-Icons: `Server`, `Search`, `Database`, `Zap`, `Box`, `Activity`.
-Effort: `low`, `medium`, `high`.
+Icons: `Server`, `Search`, `Database`, `Zap`, `Box`, `Activity`. Effort: `low`, `medium`, `high`. Exactly 3 options recommended.
 
-**Plan phase** (`/plan` — PlanDashboard reads this):
+**Phase 2 fields** (added to the same file for `/plan?decision=X` — PlanDashboard):
 ```json
 {
   "heroTitle": "Feature name",
   "heroBadge": "Ready for Spec",
+  "heroBadgeVariant": "green",
   "heroDescription": "Detailed summary",
+  "decisionOptions": [ /* ... keep from Phase 1 */ ],
   "scopeIn": ["What's included"],
   "scopeOut": ["What's excluded"],
   "tasks": [
@@ -170,7 +180,9 @@ Effort: `low`, `medium`, `high`.
 }
 ```
 
-Set `"specStatus": "created"` to archive the plan (shows completion screen).
+Architecture icons: `layout`, `monitor`, `activity`, `server`, `database`, `zap`, `cpu`, `shield`, `globe`, `barchart`, `cloud`, `clock`.
+
+Set `"specStatus": "created"` to archive the plan (shows completion screen on both routes).
 
 ### Actions Reference
 
@@ -179,9 +191,10 @@ Actions sent from browser → orchestrator:
 | Action | Trigger | Payload |
 |--------|---------|---------|
 | `decision-chosen` | "Enviar decisión" button | `{ decision, selected, title, timestamp }` |
-| `create-spec` | "Crear Spec" button | `{ changeName, decision }` |
+| `create-spec` | "Crear Spec" button | `{ changeName, decision, microDecisions }` |
 | `edit-proposal` | "Editar propuesta" button | `{ changeName }` |
-| `micro-decision` | Micro-decision confirm | `{ decision, selected, section }` |
+
+> **Micro-decisions are batched**: Selections are stored locally per component. They are sent ONLY inside the `create-spec` payload as `microDecisions: Record<string, string>` (key = decisionKey, value = selected option id). Individual `micro-decision` signals are NOT sent.
 
 ---
 
@@ -206,6 +219,56 @@ ln -sf $(pwd)/plan-viewer ~/.agents/skills/plan-viewer
 ```
 
 The skill is also available globally — any orchestrator can use it by reading `plan-viewer/SKILL.md` and its references.
+
+---
+
+## Orchestrator Quick Checklist
+
+For AI orchestrators generating plans for the first time:
+
+1. **Ensure WS server is running**: `curl -s http://localhost:4200/api/health` — if not, `cd ~/work/plan-viewer && nohup node ws-server.cjs 4200 > /tmp/ws-server.log 2>&1 &`
+2. **Write Phase 1 data only** (hero + decisionOptions) — do NOT pre-fill plan fields
+3. **Wait for `pv:decision-chosen`** — read `.plan-actions.json` for the action payload
+4. **Write Phase 2 data** — ADD plan fields to the same file, KEEP decisionOptions
+5. **Wait for `pv:create-spec`** — includes `microDecisions` with all selections
+6. **Set `specStatus: "created"`** to archive
+
+---
+
+## Troubleshooting
+
+### Blank page at `/plan?decision=X` instead of loader
+
+The PlanDashboard loading guard requires both `tasks` and `scopeIn` arrays to exist.
+If you only wrote Phase 1 data (decisionOptions) and the browser navigated to `/plan`,
+the component crashes because `plan.tasks` and `plan.scopeIn` are undefined.
+**Fix**: Write the full Phase 2 data, or ensure `tasks` and `scopeIn` arrays exist in the JSON.
+
+### WS server died — clicks don't register
+
+The `ws-server.cjs` process can die if started without `nohup` and the parent shell exits.
+**Fix**: Always start with `nohup node ws-server.cjs 4200 > /tmp/ws-server.log 2>&1 &`
+or use `start-plan-viewer.cjs` which manages child processes.
+**Check**: `curl -s http://localhost:4200/api/health` should return `{"status":"ok",...}`.
+
+### "Enviar decisión" clicked but orchestrator didn't react
+
+Check `.plan-actions.json` for the action. If the action exists but orchestrator
+didn't receive the tmux wake-up, check:
+- `echo $TMUX` — must be set (you're inside tmux)
+- `tmux list-sessions` — session name must match `TMUX_SESSION` (default: `pi`)
+- Manual trigger: send any message to the orchestrator and it'll check `.plan-actions.json`
+
+### Decision cards not showing at `/`
+
+The DecisionPanel shows 3 cards from `decisionOptions[]`. If only PlanConfig fields
+exist (scopeIn, tasks, etc.) without `decisionOptions`, the IdleState orbital loader appears.
+**Fix**: Ensure `decisionOptions` array with exactly 3 entries exists in `plan-output.json`.
+
+### Micro-decisions sent individually
+
+This was fixed in v1.5. Micro-decisions now batch into the `create-spec` payload.
+If using an older version, update `micro-decision.tsx` and `plan-dashboard.tsx`.
 
 ---
 
