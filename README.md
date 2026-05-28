@@ -23,9 +23,9 @@ node start-plan-viewer.cjs
 
 Ports are auto-allocated from 4199–4219 range. Status file at `/tmp/plan-viewer-status.json`.
 
-## Skill: `ui-native-responder`
+## Skill: `plan-viewer`
 
-The companion skill at `skill/SKILL.md` teaches agents how to compose plan pages. It defines:
+The companion skill at `plan-viewer/SKILL.md` teaches agents how to compose plan pages. It defines:
 
 - **Activation contract**: when to trigger (SDD planning phases)
 - **Design system**: Claude Code Dark Mode color tokens, typography, spacing
@@ -37,10 +37,10 @@ The companion skill at `skill/SKILL.md` teaches agents how to compose plan pages
 
 ```bash
 # For OpenCode / Gentle AI
-cp -r skill ~/.agents/skills/ui-native-responder
+cp -r plan-viewer ~/.agents/skills/plan-viewer
 
 # Or symlink
-ln -sf $(pwd)/skill ~/.agents/skills/ui-native-responder
+ln -sf $(pwd)/plan-viewer ~/.agents/skills/plan-viewer
 ```
 
 ## Deployment

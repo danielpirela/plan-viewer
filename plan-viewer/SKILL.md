@@ -1,5 +1,5 @@
 ---
-name: ui-native-responder
+name: plan-viewer
 description: "Trigger: SDD planning phase, presenting proposals, visual specs, decision UI, shadcn dashboard, plan overview. Compose shadcn/ui pages from known components to present SDD artifacts visually with minimal token spend. Powered by Anthropic frontend-design principles for distinctive, non-generic aesthetics."
 license: MIT
 metadata:
