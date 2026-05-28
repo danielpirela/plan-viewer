@@ -1,0 +1,25 @@
+# Dependencies
+node_modules
+
+# Build
+dist
+dist-ssr
+
+# Runtime state (generated at runtime, never commit)
+.plan-actions.json
+src/lib/plan-output.json
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.sw?
+
+# OS
+Thumbs.db
